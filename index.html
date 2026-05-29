@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Inventory Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f4f6; color: #1a1a1a; }
+
+  /* ── HEADER ── */
+  .header {
+    background: #1a1a2e; color: white;
+    padding: 18px 32px; display: flex;
+    align-items: center; justify-content: space-between;
+  }
+  .header h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.03em; }
+  .header .subtitle { font-size: 12px; color: #aaa; margin-top: 2px; }
+  .last-updated { font-size: 11px; color: #888; }
+
+  /* ── SUMMARY CARDS ── */
+  .cards { display: flex; gap: 16px; padding: 24px 32px 0; flex-wrap: wrap; }
+  .card {
+    flex: 1; min-width: 160px; background: white;
+    border-radius: 10px; padding: 18px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    border-left: 4px solid #ccc;
+  }
+  .card.ok     { border-color: #22c55e; }
+  .card.low    { border-color: #f59e0b; }
+  .card.out    { border-color: #ef4444; }
+  .card.total  { border-color: #6366f1; }
+  .card-num  { font-size: 32px; font-weight: 700; margin-bottom: 4px; }
+  .card.ok   .card-num { color: #22c55e; }
+  .card.low  .card-num { color: #f59e0b; }
+  .card.out  .card-num { color: #ef4444; }
+  .card.total .card-num { color: #6366f1; }
+  .card-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* ── FILTERS ── */
+  .filters {
+    display: flex; gap: 12px; padding: 20px 32px;
+    flex-wrap: wrap; align-items: center;
+  }
+  .filters input, .filters select {
+    padding: 8px 12px; border: 1px solid #ddd;
+    border-radius: 6px; font-size: 13px;
+    background: white; outline: none;
+  }
+  .filters input { width: 260px; }
+  .filters input:focus, .filters select:focus { border-color: #6366f1; }
+  .filter-label { font-size: 12px; color: #888; }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    margin: 0 32px 32px; background: white;
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: #1a1a2e; color: white; }
+  thead th {
+    padding: 12px 16px; text-align: left;
+    font-weight: 500; font-size: 12px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    cursor: pointer; user-select: none;
+  }
+  thead th:hover { background: #2d2d4e; }
+  tbody tr { border-bottom: 1px solid #f0f0f0; transition: background 0.1s; }
+  tbody tr:hover { background: #fafafa; }
+  tbody td { padding: 11px 16px; }
+
+  .sku { font-family: monospace; font-size: 12px; color: #555; }
+  .name { font-weight: 500; }
+  .variant { font-size: 11px; color: #888; }
+
+  /* ── STATUS BADGE ── */
+  .badge {
+    display: inline-block; padding: 3px 10px;
+    border-radius: 20px; font-size: 11px;
+    font-weight: 600; letter-spacing: 0.03em;
+  }
+  .badge.OK          { background: #dcfce7; color: #16a34a; }
+  .badge.LOW\ STOCK  { background: #fef9c3; color: #b45309; }
+  .badge.OUT\ OF\ STOCK { background: #fee2e2; color: #dc2626; }
+
+  /* ── STOCK BAR ── */
+  .stock-cell { display: flex; align-items: center; gap: 8px; }
+  .bar-bg { flex: 1; height: 6px; background: #f0f0f0; border-radius: 3px; min-width: 60px; }
+  .bar-fill { height: 6px; border-radius: 3px; transition: width 0.3s; }
+  .bar-fill.ok  { background: #22c55e; }
+  .bar-fill.low { background: #f59e0b; }
+  .bar-fill.out { background: #ef4444; }
+  .stock-num { font-weight: 600; min-width: 24px; text-align: right; }
+
+  /* ── CATEGORY TAG ── */
+  .cat-tag {
+    display: inline-block; padding: 2px 8px;
+    background: #f0f0ff; color: #6366f1;
+    border-radius: 4px; font-size: 11px;
+    font-weight: 500;
+  }
+
+  .no-results { text-align: center; padding: 48px; color: #aaa; font-size: 14px; }
+
+  /* ── LOADING ── */
+  .loading { text-align: center; padding: 80px; color: #aaa; }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid #eee;
+    border-top-color: #6366f1; border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🔮 Inventory Dashboard</h1>
+    <div class="subtitle">Connected to Cin7 Core · Sterling Silver Jewellery & Gifts</div>
+  </div>
+  <div class="last-updated" id="lastUpdated">Loading…</div>
+</div>
+
+<!-- Summary Cards -->
+<div class="cards">
+  <div class="card total"><div class="card-num" id="cTotal">–</div><div class="card-label">Total SKUs</div></div>
+  <div class="card ok">  <div class="card-num" id="cOk">–</div>   <div class="card-label">In Stock</div></div>
+  <div class="card low"> <div class="card-num" id="cLow">–</div>  <div class="card-label">Low Stock</div></div>
+  <div class="card out"> <div class="card-num" id="cOut">–</div>  <div class="card-label">Out of Stock</div></div>
+</div>
+
+<!-- Filters -->
+<div class="filters">
+  <input type="text" id="search" placeholder="🔍  Search SKU or product name…" oninput="renderTable()"/>
+  <select id="catFilter" onchange="renderTable()">
+    <option value="">All Categories</option>
+  </select>
+  <select id="statusFilter" onchange="renderTable()">
+    <option value="">All Status</option>
+    <option value="OUT OF STOCK">🔴 Out of Stock</option>
+    <option value="LOW STOCK">🟡 Low Stock</option>
+    <option value="OK">🟢 In Stock</option>
+  </select>
+  <span class="filter-label" id="resultCount"></span>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    Fetching inventory from Cin7 Core…
+  </div>
+  <table id="invTable" style="display:none">
+    <thead>
+      <tr>
+        <th onclick="sortBy('sku')">SKU ↕</th>
+        <th onclick="sortBy('name')">Product ↕</th>
+        <th onclick="sortBy('category')">Category ↕</th>
+        <th onclick="sortBy('stock_on_hand')">Stock ↕</th>
+        <th onclick="sortBy('reorder_point')">Reorder Point ↕</th>
+        <th onclick="sortBy('status')">Status ↕</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+  <div class="no-results" id="noResults" style="display:none">No products match your filters.</div>
+</div>
+
+<script src="api.js"></script>
+<script>
+let allData = [];
+let sortCol = 'status';
+let sortAsc = true;
+
+// ── BOOT ──────────────────────────────────────────────────
+async function init() {
+  try {
+    allData = await getInventory();           // calls api.js → mock_inventory.json
+    populateCategoryFilter();
+    updateCards();
+    renderTable();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('invTable').style.display = 'table';
+    document.getElementById('lastUpdated').textContent =
+      'Last updated: ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    document.getElementById('loading').innerHTML =
+      '<p style="color:#ef4444">❌ Could not load inventory data.<br><small>' + e.message + '</small></p>';
+  }
+}
+
+// ── CATEGORY FILTER DROPDOWN ──────────────────────────────
+function populateCategoryFilter() {
+  const cats = [...new Set(allData.map(p => p.category))].sort();
+  const sel = document.getElementById('catFilter');
+  cats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+}
+
+// ── SUMMARY CARDS ─────────────────────────────────────────
+function updateCards() {
+  document.getElementById('cTotal').textContent = allData.length;
+  document.getElementById('cOk').textContent  = allData.filter(p => p.status === 'OK').length;
+  document.getElementById('cLow').textContent  = allData.filter(p => p.status === 'LOW STOCK').length;
+  document.getElementById('cOut').textContent  = allData.filter(p => p.status === 'OUT OF STOCK').length;
+}
+
+// ── SORT ──────────────────────────────────────────────────
+function sortBy(col) {
+  if (sortCol === col) sortAsc = !sortAsc;
+  else { sortCol = col; sortAsc = true; }
+  renderTable();
+}
+
+// ── RENDER TABLE ──────────────────────────────────────────
+function renderTable() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const cat    = document.getElementById('catFilter').value;
+  const status = document.getElementById('statusFilter').value;
+
+  let filtered = allData.filter(p => {
+    const matchSearch = !search ||
+      p.sku.toLowerCase().includes(search) ||
+      p.name.toLowerCase().includes(search) ||
+      (p.variant||'').toLowerCase().includes(search);
+    const matchCat    = !cat    || p.category === cat;
+    const matchStatus = !status || p.status === status;
+    return matchSearch && matchCat && matchStatus;
+  });
+
+  // Sort – always show OUT OF STOCK first by default
+  filtered.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (sortCol === 'status') {
+      const order = {'OUT OF STOCK': 0, 'LOW STOCK': 1, 'OK': 2};
+      va = order[va]; vb = order[vb];
+    }
+    if (typeof va === 'number') return sortAsc ? va - vb : vb - va;
+    return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+
+  document.getElementById('resultCount').textContent =
+    `Showing ${filtered.length} of ${allData.length} products`;
+
+  const tbody = document.getElementById('tableBody');
+  const noRes = document.getElementById('noResults');
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    noRes.style.display = 'block';
+    return;
+  }
+  noRes.style.display = 'none';
+
+  tbody.innerHTML = filtered.map(p => {
+    const pct = p.reorder_point > 0
+      ? Math.min(100, Math.round((p.stock_on_hand / (p.reorder_point * 4)) * 100))
+      : 0;
+    const barClass = p.status === 'OK' ? 'ok' : p.status === 'LOW STOCK' ? 'low' : 'out';
+    const badgeClass = p.status.replace(/ /g, '\\ ');
+
+    return `<tr>
+      <td class="sku">${p.sku}</td>
+      <td>
+        <div class="name">${p.name}</div>
+        ${p.variant ? `<div class="variant">${p.variant}</div>` : ''}
+      </td>
+      <td><span class="cat-tag">${p.category}</span></td>
+      <td>
+        <div class="stock-cell">
+          <span class="stock-num">${p.stock_on_hand}</span>
+          <div class="bar-bg"><div class="bar-fill ${barClass}" style="width:${pct}%"></div></div>
+        </div>
+      </td>
+      <td style="color:#888">${p.reorder_point}</td>
+      <td><span class="badge ${p.status}">${p.status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+init();
+</script>
+</body>
+</html>
